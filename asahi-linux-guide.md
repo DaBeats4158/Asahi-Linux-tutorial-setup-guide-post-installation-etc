@@ -1,6 +1,6 @@
 # Asahi Linux on MacBook — Setup & Configuration Guide
 
-> **Disclaimer:** This is a personal side project. I hold no accountability for any loss of data or harm to devices. Use at your own risk — but I hope this helps you get the most out of Asahi Linux on your MacBook! :)
+> **Disclaimer:** This has been written by AI, all the research and experiment were carried out by me, however to not brick your laptop, I had AI re-do each section in a much clearer manner than I could provide. This is a personal side project. I hold no accountability for any loss of data or harm to devices. Use at your own risk — but I hope this helps you get the most out of Asahi Linux on your MacBook! :)
 
 ---
 
@@ -31,6 +31,21 @@
 13. [Games](#13-games)
 14. [Hardware Acceleration](#14-hardware-acceleration)
 15. [Other Languages](#15-other-languages)
+16. [Display & HiDPI Scaling](#16-display--hidpi-scaling)
+17. [Battery Life & Power Management](#17-battery-life--power-management)
+18. [Touchpad & Gestures](#18-touchpad--gestures)
+19. [KDE Theming](#19-kde-theming)
+20. [Flatpak](#20-flatpak)
+21. [Development Environment](#21-development-environment)
+22. [Containers (Podman / Docker)](#22-containers-podman--docker)
+23. [SSH Setup](#23-ssh-setup)
+24. [Backups with Snapper](#24-backups-with-snapper)
+25. [Screen Recording & Screenshots](#25-screen-recording--screenshots)
+26. [Printing & Scanning](#26-printing--scanning)
+27. [VPN](#27-vpn)
+28. [Wayland Tips & Quirks](#28-wayland-tips--quirks)
+29. [Switching Back to macOS (Dual Boot)](#29-switching-back-to-macos-dual-boot)
+30. [Removing Asahi Linux](#30-removing-asahi-linux)
 
 ---
 
@@ -635,6 +650,629 @@ Press `Ctrl+Space` in any application to toggle between English and Mozc. As you
 > 💡 If you receive a warning on login about `GTK_IM_MODULE` and `QT_IM_MODULE` being set, this is safe to ignore — Wayland input method is working correctly regardless.
 
 ---
+
+---
+
+## 16. Display & HiDPI Scaling
+
+MacBook screens are high-DPI (Retina), so UI elements may look tiny at native resolution. KDE Plasma handles this well with fractional scaling.
+
+### Enable Fractional Scaling
+
+Open **System Settings** → **Display and Monitor** → **Displays**. Under **Scale**, set it to **200%** for a sharp 1:1 Retina-style experience, or **150%** for more screen real estate with slightly blurrier text.
+
+> 💡 200% is pixel-perfect and sharp. 150% uses fractional scaling which can introduce slight blur on some apps — this is a Wayland limitation, not a KDE one.
+
+### Night Light (Blue Light Filter)
+
+Open **System Settings** → **Display and Monitor** → **Night Color**. Enable it and set your preferred colour temperature and schedule. This is especially useful if you use the machine late at night.
+
+### Adjusting Font DPI Separately
+
+If scaling feels off for just fonts: **System Settings** → **Fonts** → **Force Font DPI** → set to `192` (for 2× scaling) or adjust to taste.
+
+### External Monitors
+
+USB-C to DisplayPort and USB-C to HDMI adapters generally work on Asahi. Thunderbolt docks have variable support — check the [Asahi Linux feature support page](https://asahilinux.org/fedora/) for your specific model before buying one.
+
+If plugging in an external display causes KDE to crash or freeze, try:
+
+```bash
+kwin_wayland --replace &
+```
+
+---
+
+## 17. Battery Life & Power Management
+
+Asahi Linux has good battery life on Apple Silicon, but there are a few tweaks that help.
+
+### Install power-profiles-daemon
+
+Fedora Asahi ships with `power-profiles-daemon` which integrates with KDE's battery widget:
+
+```bash
+sudo dnf install power-profiles-daemon
+sudo systemctl enable --now power-profiles-daemon
+```
+
+You can then switch between **Power Saver**, **Balanced**, and **Performance** modes directly from the battery icon in the KDE taskbar.
+
+### Install TLP for finer control (optional)
+
+> ⚠️ Do **not** run TLP alongside `power-profiles-daemon` — they conflict. Disable one before enabling the other.
+
+```bash
+sudo dnf install tlp tlp-rdw
+sudo systemctl enable --now tlp
+```
+
+### Check Battery Status
+
+```bash
+upower -i /org/freedesktop/UPower/devices/battery_BAT0
+```
+
+This shows charge level, charge cycles, energy capacity, and whether the battery is discharging, charging, or fully charged.
+
+### Reduce Background Wake-ups
+
+If the machine feels warm on idle, check what's running:
+
+```bash
+powertop
+```
+
+PowerTOP shows per-process power usage and lets you toggle tunables. Run with `sudo powertop --auto-tune` to apply all recommended power saving settings in one go (these reset on reboot — use a systemd service or TLP to make them permanent).
+
+---
+
+## 18. Touchpad & Gestures
+
+The MacBook trackpad works well on Asahi Linux via `libinput`. Most gestures are configurable through KDE.
+
+### Basic Touchpad Settings
+
+Open **System Settings** → **Input Devices** → **Touchpad**. From here you can configure:
+
+- Tap to click
+- Two-finger scrolling direction (natural / traditional)
+- Three-finger tap behaviour
+- Palm detection sensitivity
+
+### Gestures with Touchégg / Fusuma
+
+For more advanced gestures (swipe to switch workspaces, pinch to zoom, etc.), install Touchégg:
+
+```bash
+sudo dnf install touchegg
+sudo systemctl enable --now touchegg
+```
+
+Then install the **KDE Touchégg** plugin from the KDE Store (right-click desktop → Add Widgets → Get New Widgets) to configure gesture actions from within System Settings.
+
+### Three-Finger Drag
+
+Three-finger drag (to move windows, like macOS) is not enabled by default. To enable it via libinput:
+
+```bash
+sudo nano /etc/X11/xorg.conf.d/99-touchpad.conf
+```
+
+Add:
+
+```
+Section "InputClass"
+    Identifier "libinput touchpad"
+    MatchIsTouchpad "on"
+    Driver "libinput"
+    Option "Tapping" "on"
+    Option "TappingDragLock" "on"
+    Option "NaturalScrolling" "true"
+EndSection
+```
+
+---
+
+## 19. KDE Theming
+
+KDE Plasma is highly customisable. Here's how to get a clean, cohesive look.
+
+### Catppuccin (recommended)
+
+Catppuccin is a popular pastel colour scheme with official KDE support. Install via the KDE Store:
+
+1. **System Settings** → **Appearance** → **Global Theme** → **Get New Global Themes**
+2. Search for **Catppuccin** and install your preferred flavour (Mocha, Macchiato, Frappé, or Latte)
+3. Apply it, then optionally apply the matching **Icon Theme** and **Colour Scheme** from their respective settings pages
+
+For the full Catppuccin experience (including Firefox), visit [catppuccin.com](https://catppuccin.com) — they have themes for virtually every app.
+
+### Lightly (modern window decoration)
+
+Lightly is a clean, modern KDE window decoration and application style inspired by macOS and GNOME:
+
+```bash
+sudo dnf copr enable soloturn/lightly
+sudo dnf install lightly
+```
+
+Apply via **System Settings** → **Appearance** → **Application Style** → select **Lightly**, and **Window Decorations** → select **Lightly**.
+
+### Cursors
+
+For a more macOS-like cursor: **System Settings** → **Appearance** → **Cursors** → **Get New Cursors** → search for **macOS** or **Bibata**.
+
+### Panel / Taskbar
+
+Right-click the taskbar → **Enter Edit Mode** to reposition, resize, or remove the panel. A common MacBook-inspired layout:
+- Move the panel to the **top**
+- Add a **Global Menu** widget (shows the app menu bar at the top, like macOS)
+- Add **Latte Dock** at the bottom for a dock (see Section 9)
+
+---
+
+## 20. Flatpak
+
+Flatpak lets you install sandboxed apps that are independent of your system's package manager — useful for getting up-to-date versions of apps that are behind in the Fedora repos.
+
+### Enable Flathub
+
+```bash
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+```
+
+### Installing Apps
+
+```bash
+# Examples
+flatpak install flathub com.spotify.Client
+flatpak install flathub md.obsidian.Obsidian
+flatpak install flathub com.discordapp.Discord
+flatpak install flathub org.gimp.GIMP
+```
+
+Search for apps at [flathub.org](https://flathub.org).
+
+### Running Flatpak Apps
+
+They appear in your KDE application launcher automatically. Or from the terminal:
+
+```bash
+flatpak run com.spotify.Client
+```
+
+### Updating All Flatpaks
+
+```bash
+flatpak update
+```
+
+> 💡 Flatpak apps are sandboxed and may need permission grants to access your files. If an app can't see your home folder, go to **System Settings** → **Applications** → **Flatpak Permissions** to adjust.
+
+---
+
+## 21. Development Environment
+
+### VS Code
+
+Install via Flatpak for the most up-to-date version:
+
+```bash
+flatpak install flathub com.visualstudio.code
+```
+
+Or via the official RPM repo:
+
+```bash
+sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+sudo sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
+sudo dnf install code
+```
+
+### Git
+
+Git is usually pre-installed. Configure it:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+git config --global core.editor nano   # or vim, code, etc.
+```
+
+### Node.js (via nvm — recommended over system Node)
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+# Restart terminal, then:
+nvm install --lts
+nvm use --lts
+```
+
+### Python
+
+Python 3 is pre-installed on Fedora. For isolated project environments:
+
+```bash
+python3 -m venv myenv
+source myenv/bin/activate
+pip install your-package
+```
+
+### Neovim
+
+```bash
+sudo dnf install neovim
+```
+
+For a full modern Neovim config, [LazyVim](https://www.lazyvim.org/) is a popular pre-configured distribution — follow the install guide on their site. Requires a Nerd Font (see Section 8).
+
+---
+
+## 22. Containers (Podman / Docker)
+
+Fedora ships with **Podman** — a rootless, daemonless Docker-compatible container runtime. You can use Docker commands with Podman transparently.
+
+### Install Podman
+
+```bash
+sudo dnf install podman podman-compose
+```
+
+### Docker compatibility alias
+
+```bash
+echo "alias docker=podman" >> ~/.bashrc
+source ~/.bashrc
+```
+
+Now `docker run`, `docker build`, etc. all work via Podman.
+
+### Podman Desktop (GUI)
+
+```bash
+flatpak install flathub io.podman_desktop.PodmanDesktop
+```
+
+### Basic Usage
+
+```bash
+# Pull and run an image
+podman run -it ubuntu bash
+
+# List running containers
+podman ps
+
+# List all containers (including stopped)
+podman ps -a
+
+# Build from Dockerfile
+podman build -t myapp .
+```
+
+> 💡 Podman containers run rootless by default (no daemon, no `sudo` needed), which is safer than Docker's traditional model.
+
+---
+
+## 23. SSH Setup
+
+### Generate an SSH Key
+
+```bash
+ssh-keygen -t ed25519 -C "you@example.com"
+```
+
+Accept the default path (`~/.ssh/id_ed25519`) and set a passphrase. Ed25519 is more secure and faster than RSA.
+
+### Add to SSH Agent
+
+```bash
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+```
+
+To have the key added automatically on login, add those lines to `~/.bashrc` (or `~/.config/fish/config.fish` for Fish).
+
+### Copy Public Key to a Server
+
+```bash
+ssh-copy-id user@your-server.com
+```
+
+Or manually: copy the output of `cat ~/.ssh/id_ed25519.pub` into `~/.ssh/authorized_keys` on the remote server.
+
+### Add to GitHub / GitLab
+
+```bash
+cat ~/.ssh/id_ed25519.pub
+```
+
+Copy the output, then paste it into GitHub: Settings → SSH and GPG Keys → New SSH key.
+
+### SSH Config File (for shortcuts)
+
+Create or edit `~/.ssh/config`:
+
+```
+Host myserver
+    HostName 192.168.1.100
+    User youruser
+    IdentityFile ~/.ssh/id_ed25519
+```
+
+Now `ssh myserver` works instead of typing the full command each time.
+
+---
+
+## 24. Backups with Snapper
+
+Fedora Asahi uses **Btrfs** as its filesystem, which supports copy-on-write snapshots. **Snapper** manages these snapshots automatically, giving you a Time Machine-like rollback capability.
+
+### Install Snapper
+
+```bash
+sudo dnf install snapper
+```
+
+### Create a Snapper Config for Root
+
+```bash
+sudo snapper -c root create-config /
+```
+
+### Take a Manual Snapshot
+
+```bash
+sudo snapper -c root create --description "before major changes"
+```
+
+### List Snapshots
+
+```bash
+sudo snapper -c root list
+```
+
+### Restore a Snapshot
+
+To roll back to a previous snapshot, boot into a snapshot from the GRUB menu (if `grub-btrfs` is installed), or restore manually:
+
+```bash
+sudo snapper -c root undochange 1..2   # restore changes between snapshots 1 and 2
+```
+
+### Enable Automatic Snapshots
+
+Snapper can automatically snapshot before and after every `dnf` transaction (update, install, remove), giving you a clean rollback path if an update breaks something:
+
+```bash
+sudo dnf install python3-dnf-plugin-snapper
+```
+
+Once installed, every `dnf` operation will create a pre/post snapshot pair automatically.
+
+---
+
+## 25. Screen Recording & Screenshots
+
+### Screenshots
+
+KDE Plasma has a built-in screenshot tool: press `Print Screen` (or `Fn+Shift` on some MacBook keyboards) to open **Spectacle**.
+
+From the terminal:
+
+```bash
+spectacle            # full GUI
+spectacle -f         # full screen, no GUI
+spectacle -r         # select region
+spectacle -a         # active window
+```
+
+Screenshots are saved to `~/Pictures/Screenshots` by default.
+
+### Screen Recording
+
+**Obs Studio** is the best option for screen recording and streaming:
+
+```bash
+sudo dnf install obs-studio
+```
+
+Or via Flatpak for the latest version:
+
+```bash
+flatpak install flathub com.obsproject.Studio
+```
+
+OBS works with Wayland via PipeWire screen capture. On first launch, select **Wayland** as the capture method when adding a Screen Capture source.
+
+> 💡 For quick one-off recordings without OBS, KDE Plasma 6 has a built-in screen recorder: `Meta+Shift+R` starts and stops a recording, saved to `~/Videos`.
+
+---
+
+## 26. Printing & Scanning
+
+### Printing
+
+CUPS (Common Unix Printing System) handles printing on Linux. Install it and enable it:
+
+```bash
+sudo dnf install cups cups-filters system-config-printer
+sudo systemctl enable --now cups
+```
+
+Open the CUPS web interface to add a printer: go to `http://localhost:631` in Firefox → **Administration** → **Add Printer**.
+
+Most modern printers are supported automatically via **IPP Everywhere** (driverless printing) — just plug in or connect to the same network and CUPS should detect it.
+
+For HP printers specifically:
+
+```bash
+sudo dnf install hplip
+hp-setup
+```
+
+### Scanning
+
+```bash
+sudo dnf install simple-scan
+```
+
+**Simple Scan** is a straightforward GUI scanner app. Most USB and network scanners are detected automatically via SANE.
+
+---
+
+## 27. VPN
+
+### WireGuard (recommended — fastest and simplest)
+
+WireGuard is built into the Linux kernel and works excellently on Asahi:
+
+```bash
+sudo dnf install wireguard-tools
+```
+
+If your VPN provider gives you a `.conf` file:
+
+```bash
+sudo cp myvpn.conf /etc/wireguard/wg0.conf
+sudo systemctl enable --now wg-quick@wg0
+```
+
+To connect/disconnect via KDE: install the **plasma-nm** WireGuard plugin:
+
+```bash
+sudo dnf install NetworkManager-wireguard-gnome
+```
+
+Then add your VPN in **System Settings** → **Connections** → **+** → **WireGuard**.
+
+### OpenVPN
+
+```bash
+sudo dnf install NetworkManager-openvpn-gnome
+```
+
+Import your `.ovpn` file via **System Settings** → **Connections** → **+** → **Import VPN connection**.
+
+### ProtonVPN (if you use it)
+
+```bash
+flatpak install flathub com.protonvpn.www
+```
+
+The official ProtonVPN Linux app works on Asahi via Flatpak and integrates with NetworkManager.
+
+---
+
+## 28. Wayland Tips & Quirks
+
+Asahi Linux runs on Wayland by default (not X11). This is generally better, but a few things behave differently.
+
+### XWayland (for legacy X11 apps)
+
+Most apps run natively on Wayland. For older apps that need X11, **XWayland** is included and runs transparently — you generally don't need to do anything.
+
+To check whether an app is running on Wayland or XWayland:
+
+```bash
+flatpak run --env=WAYLAND_DEBUG=1 com.example.App 2>&1 | head -20
+# or simply:
+qdbus org.kde.KWin /KWin supportInformation | grep -i xwayland
+```
+
+### Screen Sharing in Browsers / Video Calls
+
+Screen sharing works on Wayland via PipeWire. If a browser or video call app says it can't share your screen:
+
+1. Make sure `xdg-desktop-portal-kde` is installed:
+   ```bash
+   sudo dnf install xdg-desktop-portal-kde
+   ```
+2. Restart your session (log out and back in)
+3. In Firefox, go to `about:config` and set `media.webrtc.camera.allow-pipewire` to `true`
+
+### Clipboard Managers
+
+Wayland clipboard behaviour is slightly different from X11 — content copied in one app is lost when that app closes. To preserve clipboard history:
+
+```bash
+sudo dnf install klipper
+```
+
+Klipper is KDE's clipboard manager and comes with Plasma. Check it's running in the system tray.
+
+### App Scaling Issues (XWayland blurriness)
+
+If an X11 app (running via XWayland) looks blurry at your HiDPI scale, set this environment variable:
+
+```bash
+export GDK_SCALE=2          # for GTK apps
+export QT_SCALE_FACTOR=2    # for Qt apps
+```
+
+Add to `~/.bashrc` to make permanent.
+
+---
+
+## 29. Switching Back to macOS (Dual Boot)
+
+If Asahi Linux is installed alongside macOS, you can switch between them at boot.
+
+### At Startup
+
+Hold down the **power button** (on Apple Silicon Macs, not a separate key) until you see the startup options screen. From here, select either your macOS volume or Fedora Asahi.
+
+### Set the Default Boot OS
+
+To make macOS the default (so you don't have to hold the power button every time):
+
+```bash
+# From inside Asahi Linux:
+sudo systemctl reboot --boot-loader-entry=auto   # boots into firmware picker once
+```
+
+Or from **macOS**: System Settings → General → Startup Disk → select your macOS volume.
+
+To make Asahi the default from macOS:
+
+```bash
+# In macOS terminal:
+sudo bless --mount /Volumes/Fedora --setBoot --nextonly
+```
+
+> 💡 The cleaner long-term way is to set your preferred default from the macOS Startup Disk pane — this persists across reboots.
+
+---
+
+## 30. Removing Asahi Linux
+
+If you want to go back to macOS only and reclaim your disk space, the Asahi installer handles uninstallation safely. **Do not try to delete the partition manually in Disk Utility** — this can leave the bootloader in a broken state.
+
+### Back Up First
+
+Before removing, make sure you've copied out everything you want to keep (see the backup checklist in the conversation that prompted this guide):
+
+- `~/.config/` (dotfiles, app configs)
+- `~/.ssh/` (SSH keys)
+- `~/GOGGames/`, `~/downloads/` (games and media)
+- Any `.desktop` files from `~/.local/share/applications/`
+
+### Run the Asahi Uninstaller
+
+Boot into **macOS**, open Terminal, and run the same installer script:
+
+```bash
+curl https://alx.sh | sh
+```
+
+Choose the **uninstall** option. The installer will remove the Asahi partitions, remove the Asahi bootloader entry, and restore macOS as the sole boot target. Your macOS install is untouched throughout.
+
+After uninstalling, run **Disk Utility** → select your main drive → **First Aid** to verify the partition map is clean.
+
+> ⚠️ Make sure macOS is up to date before running the uninstaller, and ideally have a Time Machine or external backup of macOS itself just in case.
+
+---
+
 
 ## Contributing / Feedback
 
